@@ -145,10 +145,9 @@ gather_config() {
 
     echo
     ask_password USER_HASH "$NEW_USER"
-    # No separate root password: root shares the user's password (so `su` and
-    # emergency/recovery logins still work). LOCK_ROOT=1 locks root instead
-    # (sudo-only, Ubuntu-style).
-    if [[ "${LOCK_ROOT:-0}" == 1 ]]; then ROOT_HASH='!'; else ROOT_HASH=$USER_HASH; fi
+    # No root password: root is locked and the user does everything with sudo
+    # (Ubuntu-style). LOCK_ROOT=0 gives root the user's password instead.
+    if [[ "${LOCK_ROOT:-1}" == 1 ]]; then ROOT_HASH='!'; else ROOT_HASH=$USER_HASH; fi
 
     local esp_line="n/a (BIOS: 1 MiB bios_grub partition)"
     [[ "$BOOT_MODE" == uefi ]] && esp_line="1 GiB FAT32 ESP -> /boot/efi"
@@ -166,7 +165,7 @@ gather_config() {
   Apps          : Audacity, OBS Studio, Steam, Discord${EXTRA_PKGS:+, $EXTRA_PKGS}
   AUR           : claude-desktop${AUR_EXTRA_PKGS:+, $AUR_EXTRA_PKGS}$([[ "${INSTALL_RESOLVE,,}" == y* ]] && echo ", $RESOLVE_PKG")
   Host / user   : $NEW_HOSTNAME / $NEW_USER (sudo via wheel)
-  Root account  : $([[ "${LOCK_ROOT:-0}" == 1 ]] && echo "locked (use sudo)" || echo "same password as $NEW_USER")
+  Root account  : $([[ "${LOCK_ROOT:-1}" == 1 ]] && echo "locked -- use sudo" || echo "same password as $NEW_USER")
   Locale / TZ   : $LOCALE / $TIMEZONE / keymap $KEYMAP
 EOF
     echo
