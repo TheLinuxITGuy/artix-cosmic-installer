@@ -188,7 +188,7 @@ The script asks for the following. Press **Enter** to accept the default shown i
 | Locale | `en_US.UTF-8` | |
 | Console keymap | `us` | |
 | Install DaVinci Resolve Studio | `y` | Downloads about 3 GB from Blackmagic and builds the package. You can answer `n` and install it later. |
-| Passwords | — | One for your user and one for root. Only a hashed copy is stored, and it's deleted after the install. |
+| Password | — | Your user's password, typed twice. There's no separate root password: root gets the same one, and your user has full admin rights through `sudo`. Only a hashed copy is stored during the install, and it's deleted afterwards. |
 
 After that you'll see a summary. Type **`ERASE`** to start.
 
@@ -211,9 +211,10 @@ bash artix-cosmic-install.sh
 | `RESOLVE_PKG` | `davinci-resolve-studio` by default. Set it to `davinci-resolve` for the free edition. |
 | `EXTRA_PKGS` | Extra packages from the Artix/Arch repos, separated by spaces. Empty by default. |
 | `AUR_EXTRA_PKGS` | Extra AUR packages, separated by spaces. The default is `brave-origin-bin` (Brave Origin). `AUR_EXTRA_PKGS=""` skips it. |
+| `LOCK_ROOT=1` | Locks the root account instead of giving it your password, Ubuntu-style. Use `sudo` for everything. |
 | `FORCE=1` | Lets the script run on something other than the Artix ISO (not recommended) |
 
-Passwords are always asked for interactively.
+The password is always asked for interactively.
 
 ---
 
@@ -317,7 +318,7 @@ On the installed system: `/var/log/artix-cosmic-install.log`.
 **Stage 2** runs inside `artix-chroot`:
 1. It sets the timezone, locale, keymap, hostname and `/etc/hosts`.
 2. It sets up pacman. It turns on Artix `[lib32]`, installs `artix-archlinux-support`, and adds the Arch `[extra]` and `[multilib]` repos *after* the Artix repos. COSMIC, Steam and Discord come from those repos.
-3. It creates your user (`wheel`, `audio`, `video`, `input`, `kvm`, …) and lets `wheel` use sudo.
+3. It creates your user (`wheel`, `audio`, `video`, `input`, `kvm`, …) and lets `wheel` use sudo. Root gets the same password as your user, or is locked with `LOCK_ROOT=1`.
 4. It installs GPU drivers: Mesa and Vulkan for AMD and Intel, plus `nvidia-open-dkms` for NVIDIA. It installs the 32-bit libraries too, for Steam.
 5. It installs COSMIC: the `cosmic` group, greetd, PipeWire, fonts, Bluetooth and gnome-keyring.
 6. It sets up cosmic-greeter without systemd. It creates the `cosmic-greeter` user, a greetd config on VT7 and the PAM files. Then it writes dinit or OpenRC services for `cosmic-greeter-daemon` and greetd. Arch's packages ship only systemd units, so the script writes these by hand.
