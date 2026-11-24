@@ -107,22 +107,48 @@ sudo dd if=artix-base-dinit-*.iso of=/dev/sdX bs=4M status=progress oflag=sync
 
 **Wired Ethernet** connects automatically.
 
-**Wi-Fi.** The base ISO uses ConnMan:
+**USB tethering from your phone** also works without any setup. Plug the phone in, turn on USB tethering, and it shows up as a wired connection. If it doesn't connect by itself, run `dhcpcd`.
+
+**Wi-Fi.** Which Wi-Fi tool the live ISO includes has changed between ISO releases, so check first:
 ```bash
 rfkill unblock wifi
+command -v nmcli iwctl wpa_supplicant connmanctl   # prints the tools this ISO has
+ip link                                            # your Wi-Fi interface, e.g. wlan0 or wlp1s0
+```
+Then use whichever tool it found.
+
+**`nmcli` (NetworkManager)**
+```bash
+nmcli device wifi list
+nmcli --ask device wifi connect "YourNetworkName"
+```
+
+**`iwctl` (iwd)**
+```bash
+iwctl station wlan0 scan
+iwctl station wlan0 get-networks
+iwctl station wlan0 connect "YourNetworkName"      # asks for the password
+dhcpcd wlan0                                       # only needed if you don't get an IP address
+```
+
+**`wpa_supplicant` only**
+```bash
+wpa_passphrase "YourNetworkName" 'YourPassword' > /tmp/wifi.conf
+wpa_supplicant -B -i wlan0 -c /tmp/wifi.conf
+dhcpcd wlan0
+```
+
+**`connmanctl` (ConnMan, used by older ISOs)**
+```
 connmanctl
-```
-Then, inside `connmanctl`:
-```
 agent on
 enable wifi
 scan wifi
 services                    # lists networks, e.g.  MyWifi   wifi_abc123_managed_psk
 connect wifi_abc123_managed_psk
-                            # type your Wi-Fi password when asked
 quit
 ```
-(If your ISO has NetworkManager instead, run `nmtui` and choose **Activate a connection**.)
+In all of these, replace `wlan0` with your interface name from `ip link`.
 
 **Check that you're online:**
 ```bash
