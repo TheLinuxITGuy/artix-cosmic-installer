@@ -8,7 +8,7 @@ This script installs **Artix Linux** (Arch without systemd) on one whole disk. Y
 | **Filesystem** | **XFS** root. On UEFI there's also a FAT32 EFI partition. Swap is optional. |
 | **Init** | **dinit** (recommended) or **OpenRC** |
 | **Desktop** | **COSMIC**, with **cosmic-greeter** as the login screen (it runs on greetd) |
-| **Apps** | DaVinci Resolve **Studio**, Audacity, Claude desktop, OBS Studio, Steam, Discord, plus Firefox so you have a browser |
+| **Apps** | DaVinci Resolve **Studio**, Audacity, Claude desktop, OBS Studio, Steam, Discord, **Brave Origin** (browser) |
 | **Extras** | PipeWire audio, NetworkManager, Bluetooth, GPU drivers picked to match your hardware, the `yay` AUR helper |
 
 > ⚠️ **The script erases the whole disk you pick.** Back up anything you need first. It won't start until you type `ERASE`.
@@ -179,7 +179,8 @@ bash artix-cosmic-install.sh
 | `DISK` `INIT` `NEW_HOSTNAME` `NEW_USER` `TIMEZONE` `LOCALE` `KEYMAP` `SWAP_SIZE` `INSTALL_RESOLVE` | Same as the prompts above |
 | `GPU` | Overrides the GPU detection with any of `amd` `intel` `nvidia` `vm`, separated by spaces (e.g. `GPU="intel nvidia"` for a hybrid laptop) |
 | `RESOLVE_PKG` | `davinci-resolve-studio` by default. Set it to `davinci-resolve` for the free edition. |
-| `EXTRA_PKGS` | Extra repo packages, separated by spaces. The default is `firefox`. `EXTRA_PKGS=""` installs no extras. |
+| `EXTRA_PKGS` | Extra packages from the Artix/Arch repos, separated by spaces. Empty by default. |
+| `AUR_EXTRA_PKGS` | Extra AUR packages, separated by spaces. The default is `brave-origin-bin` (Brave Origin). `AUR_EXTRA_PKGS=""` skips it. |
 | `FORCE=1` | Lets the script run on something other than the Artix ISO (not recommended) |
 
 Passwords are always asked for interactively.
@@ -210,6 +211,7 @@ If anything optional failed during the install (for example, an AUR build), the 
   - AMD GPUs use `rocm-opencl-runtime`, Intel GPUs use `intel-compute-runtime`, and NVIDIA GPUs use `opencl-nvidia`. The script installs the one that matches your GPU.
   - If activation says *"Cannot activate license"*, make sure your user can write to `/opt/resolve/.license`. The script sets that up, but a reinstall can reset it: `sudo chown -R $USER /opt/resolve/.license`.
   - On Linux, Resolve can't import or export H.264/H.265 or AAC in the free edition. **Studio** supports H.264/H.265 with GPU acceleration. For AAC audio, use PCM/WAV or transcode with ffmpeg.
+- **Brave Origin:** your browser. It's Brave without the AI, Rewards, Wallet and VPN features, but Shields (ad and tracker blocking) is still there. It's free on Linux: during setup, choose the free option instead of buying a license.
 - **Claude desktop:** open **Claude** from the app library and sign in. It comes from the AUR package `claude-desktop`, which repackages Anthropic's official Linux `.deb`. The Linux app is in beta. Cowork's VM needs KVM, so your user is added to the `kvm` group.
 - **OBS Studio:** to capture the screen, add a **Screen Capture (PipeWire)** source. COSMIC's portal asks which screen or window to share.
 - **Discord:** screen sharing on Wayland also goes through the portal.
@@ -245,10 +247,11 @@ pgrep -a pipewire; pgrep -a wireplumber
 ```
 If they aren't running, start them with `artix-pipewire-start &`, then log out and back in.
 
-### An AUR package failed (Claude desktop / DaVinci Resolve)
+### An AUR package failed (Claude desktop / Brave Origin / DaVinci Resolve)
 AUR builds sometimes break because of upstream changes. Retry after the first boot:
 ```bash
 yay -S claude-desktop
+yay -S brave-origin-bin
 yay -S davinci-resolve-studio      # or davinci-resolve for the free edition
 ```
 If `claude-desktop` keeps failing, try `claude-desktop-appimage`. If Resolve's download from Blackmagic fails, download the Linux zip from https://www.blackmagicdesign.com/support/family/davinci-resolve-and-fusion. Put it in `~/.cache/yay/davinci-resolve-studio/` and run `yay -S davinci-resolve-studio` again.
@@ -287,9 +290,9 @@ On the installed system: `/var/log/artix-cosmic-install.log`.
 5. It installs COSMIC: the `cosmic` group, greetd, PipeWire, fonts, Bluetooth and gnome-keyring.
 6. It sets up cosmic-greeter without systemd. It creates the `cosmic-greeter` user, a greetd config on VT7 and the PAM files. Then it writes dinit or OpenRC services for `cosmic-greeter-daemon` and greetd. Arch's packages ship only systemd units, so the script writes these by hand.
 7. It adds the PipeWire autostart.
-8. It installs Audacity, OBS Studio, Steam, Discord and Firefox.
+8. It installs Audacity, OBS Studio, Steam and Discord.
 9. It enables these services: dbus, elogind, NetworkManager, bluetooth, cosmic-greeter-daemon and cosmic-greeter.
-10. It builds `yay` and uses it to install `claude-desktop` and `davinci-resolve-studio`, along with the OpenCL runtime that matches your GPU. It gives the user temporary sudo rights for these builds and removes them afterwards.
+10. It builds `yay` and uses it to install `claude-desktop`, `brave-origin-bin` and `davinci-resolve-studio`, along with the OpenCL runtime that matches your GPU. It gives the user temporary sudo rights for these builds and removes them afterwards.
 11. It runs `mkinitcpio -P` and `grub-install` (plus the fallback copy on UEFI), then `grub-mkconfig`.
 
 ---

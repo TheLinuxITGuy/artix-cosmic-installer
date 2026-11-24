@@ -3,7 +3,7 @@
 #  Artix Linux + COSMIC installer
 #  linux-zen kernel | XFS root | COSMIC desktop + cosmic-greeter
 #  Apps: DaVinci Resolve Studio, Audacity, Claude desktop, OBS Studio,
-#        Steam, Discord
+#        Steam, Discord, Brave Origin
 #
 #  Run from an Artix *base* live ISO (dinit or OpenRC) as root:
 #      bash artix-cosmic-install.sh
@@ -142,7 +142,8 @@ gather_config() {
     [[ "$SWAP_SIZE" =~ ^(0|[0-9]+[MG])$ ]] || die "SWAP_SIZE must look like 8G, 512M or 0."
     ask INSTALL_RESOLVE "Install DaVinci Resolve Studio from the AUR (large download, long build) y/n" "y"
     RESOLVE_PKG=${RESOLVE_PKG:-davinci-resolve-studio}
-    EXTRA_PKGS=${EXTRA_PKGS-firefox}
+    EXTRA_PKGS=${EXTRA_PKGS-}
+    AUR_EXTRA_PKGS=${AUR_EXTRA_PKGS-brave-origin-bin}
 
     echo
     ask_password USER_HASH "$NEW_USER"
@@ -163,8 +164,8 @@ gather_config() {
   Kernel        : linux-zen (+ headers)
   Desktop       : COSMIC + cosmic-greeter (greetd)
   GPU drivers   : $GPU
-  Apps          : Audacity, OBS Studio, Steam, Discord, ${EXTRA_PKGS:-<no extras>}
-  AUR           : claude-desktop$([[ "${INSTALL_RESOLVE,,}" == y* ]] && echo ", $RESOLVE_PKG")
+  Apps          : Audacity, OBS Studio, Steam, Discord${EXTRA_PKGS:+, $EXTRA_PKGS}
+  AUR           : claude-desktop${AUR_EXTRA_PKGS:+, $AUR_EXTRA_PKGS}$([[ "${INSTALL_RESOLVE,,}" == y* ]] && echo ", $RESOLVE_PKG")
   Host / user   : $NEW_HOSTNAME / $NEW_USER (sudo via wheel)
   Locale / TZ   : $LOCALE / $TIMEZONE / keymap $KEYMAP
 EOF
@@ -240,7 +241,7 @@ run_stage2() {
     step "Handing over to the chroot (stage 2)"
     ( umask 077
       declare -p SCRIPT_VERSION DISK BOOT_MODE INIT NEW_HOSTNAME NEW_USER TIMEZONE LOCALE KEYMAP \
-                 GPU UCODE INSTALL_RESOLVE RESOLVE_PKG EXTRA_PKGS USER_HASH ROOT_HASH \
+                 GPU UCODE INSTALL_RESOLVE RESOLVE_PKG EXTRA_PKGS AUR_EXTRA_PKGS USER_HASH ROOT_HASH \
                  > "$TARGET$CONF_IN_TARGET" )
     install -m700 "$(readlink -f "${BASH_SOURCE[0]}")" "$TARGET$SCRIPT_IN_TARGET"
     artix-chroot "$TARGET" /bin/bash "$SCRIPT_IN_TARGET" --stage2
@@ -571,7 +572,7 @@ enable_services() {
 }
 
 install_aur() {
-    step "AUR: yay, Claude desktop$([[ "${INSTALL_RESOLVE,,}" == y* ]] && echo ", $RESOLVE_PKG")"
+    step "AUR: yay, Claude desktop${AUR_EXTRA_PKGS:+, $AUR_EXTRA_PKGS}$([[ "${INSTALL_RESOLVE,,}" == y* ]] && echo ", $RESOLVE_PKG")"
     local tmp_sudo=/etc/sudoers.d/99-artix-installer-temp
     echo "$NEW_USER ALL=(ALL) NOPASSWD: ALL" > "$tmp_sudo"; chmod 440 "$tmp_sudo"
 
@@ -585,6 +586,11 @@ install_aur() {
     if command -v yay &>/dev/null; then
         local yayflags="--noconfirm --needed --answerdiff None --answerclean None --removemake"
         as_user "yay -S $yayflags claude-desktop" || record_failure "AUR: claude-desktop"
+
+        local p
+        for p in $AUR_EXTRA_PKGS; do   # brave-origin-bin by default
+            as_user "yay -S $yayflags $p" || record_failure "AUR: $p"
+        done
 
         if [[ "${INSTALL_RESOLVE,,}" == y* ]]; then
             # OpenCL runtime for Resolve, matched to the GPU
