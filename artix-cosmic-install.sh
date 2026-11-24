@@ -196,10 +196,16 @@ partition_disk() {
     [[ -n "$ESP_PART" ]]  && mkfs.fat -F32 -n EFI "$ESP_PART"
     mkfs.xfs -f -L ARTIX "$ROOT_PART"
 
-    mount "$ROOT_PART" "$TARGET"
+    # Load the filesystem drivers and name the types explicitly: on the live
+    # ISO, mount's auto-detection can miss a freshly made XFS and fall back to
+    # guessing (e.g. "Can't find a SQUASHFS superblock").
+    modprobe xfs 2>/dev/null || true
+    modprobe vfat 2>/dev/null || true
+    udevadm settle 2>/dev/null || sleep 2
+    mount -t xfs "$ROOT_PART" "$TARGET"
     if [[ -n "$ESP_PART" ]]; then
         mkdir -p "$TARGET/boot/efi"
-        mount "$ESP_PART" "$TARGET/boot/efi"
+        mount -t vfat "$ESP_PART" "$TARGET/boot/efi"
     fi
     lsblk "$DISK"
 }
