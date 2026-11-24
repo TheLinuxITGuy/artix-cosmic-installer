@@ -187,12 +187,12 @@ The script asks for the following. Press **Enter** to accept the default shown i
 | Timezone | `America/Denver` | Any `Region/City` from `/usr/share/zoneinfo`, e.g. `America/New_York` |
 | Locale | `en_US.UTF-8` | |
 | Console keymap | `us` | |
-| Install DaVinci Resolve Studio | `y` | Downloads about 3 GB from Blackmagic and builds the package. You can answer `n` and install it later. |
+| Prepare for DaVinci Resolve Studio | `y` | Installs the OpenCL runtime for your GPU and the `install-davinci-resolve` command. You finish the Resolve install after the first boot; see [After the first boot](#9-after-the-first-boot). |
 | Password | — | Your user's password, typed twice. There's no root password: the root account is locked, and you do all admin work with `sudo`. Only a hashed copy is stored during the install, and it's deleted afterwards. |
 
 After that you'll see a summary. Type **`ERASE`** to start.
 
-The install takes roughly **20 to 60 minutes**, depending on your internet speed and on DaVinci Resolve.
+The install takes roughly **20 to 45 minutes**, depending on your internet speed.
 
 ### Skipping the prompts (advanced)
 
@@ -208,7 +208,6 @@ bash artix-cosmic-install.sh
 |---|---|
 | `DISK` `INIT` `NEW_HOSTNAME` `NEW_USER` `TIMEZONE` `LOCALE` `KEYMAP` `INSTALL_RESOLVE` | Same as the prompts above |
 | `GPU` | Overrides the GPU detection with any of `amd` `intel` `nvidia` `vm`, separated by spaces (e.g. `GPU="intel nvidia"` for a hybrid laptop) |
-| `RESOLVE_PKG` | `davinci-resolve-studio` by default. Set it to `davinci-resolve` for the free edition. |
 | `EXTRA_PKGS` | Extra packages from the Artix/Arch repos, separated by spaces. Empty by default. |
 | `AUR_EXTRA_PKGS` | Extra AUR packages, separated by spaces. The default is `brave-origin-bin` (Brave Origin). `AUR_EXTRA_PKGS=""` skips it. |
 | `LOCK_ROOT=0` | Instead of locking root, gives it the same password as your user, so `su` works. |
@@ -238,7 +237,19 @@ If anything optional failed during the install (for example, an AUR build), the 
 - **Update everything:** `sudo pacman -Syu`. For AUR packages too, run `yay -Syu`.
 - **Wi-Fi:** use the network applet in the COSMIC panel, or run `nmtui` in a terminal.
 - **Steam:** sign in, then go to *Settings → Compatibility → Enable Steam Play for all other titles* to run Windows games through Proton.
-- **DaVinci Resolve Studio:** start it from the app library. On first launch, enter your license key or plug in your dongle.
+- **DaVinci Resolve Studio:** the AUR package can't download Resolve for you, so this takes three steps:
+  1. Open https://www.blackmagicdesign.com/support/family/davinci-resolve-and-fusion in Brave. Download the latest **DaVinci Resolve Studio** for **Linux** (fill in the short form) and save the zip to `~/Downloads`. Don't rename it.
+  2. Open a terminal and run:
+     ```bash
+     install-davinci-resolve          # or: install-davinci-resolve free
+     ```
+     The command fetches the current AUR package, finds the zip and builds Resolve. It asks for your sudo password. If the zip is missing or is the wrong version, it tells you exactly which file the AUR package needs.
+  3. Start Resolve from the app library. On first launch, enter your license key or plug in your dongle.
+  - If your install doesn't have the command, download it from this repo:
+    ```bash
+    curl -LO https://raw.githubusercontent.com/TheLinuxITGuy/artix-cosmic-installer/main/install-davinci-resolve.sh
+    bash install-davinci-resolve.sh
+    ```
   - AMD GPUs use `rocm-opencl-runtime`, Intel GPUs use `intel-compute-runtime`, and NVIDIA GPUs use `opencl-nvidia`. The script installs the one that matches your GPU.
   - If activation says *"Cannot activate license"*, make sure your user can write to `/opt/resolve/.license`. The script sets that up, but a reinstall can reset it: `sudo chown -R $USER /opt/resolve/.license`.
   - On Linux, Resolve can't import or export H.264/H.265 or AAC in the free edition. **Studio** supports H.264/H.265 with GPU acceleration. For AAC audio, use PCM/WAV or transcode with ffmpeg.
@@ -278,14 +289,13 @@ pgrep -a pipewire; pgrep -a wireplumber
 ```
 If they aren't running, start them with `artix-pipewire-start &`, then log out and back in.
 
-### An AUR package failed (Claude desktop / Brave Origin / DaVinci Resolve)
+### An AUR package failed (Claude desktop / Brave Origin)
 AUR builds sometimes break because of upstream changes. Retry after the first boot:
 ```bash
 yay -S claude-desktop
 yay -S brave-origin-bin
-yay -S davinci-resolve-studio      # or davinci-resolve for the free edition
 ```
-If `claude-desktop` keeps failing, try `claude-desktop-appimage`. If Resolve's download from Blackmagic fails, download the Linux zip from https://www.blackmagicdesign.com/support/family/davinci-resolve-and-fusion. Put it in `~/.cache/yay/davinci-resolve-studio/` and run `yay -S davinci-resolve-studio` again.
+If `claude-desktop` keeps failing, try `claude-desktop-appimage`. For DaVinci Resolve, use `install-davinci-resolve` (see [After the first boot](#9-after-the-first-boot)).
 
 ### NVIDIA card older than Turing (GTX 10xx and earlier)
 Replace the open driver with the legacy branch from the AUR. Check the Arch wiki NVIDIA page for the right package for your card, for example:
@@ -334,7 +344,7 @@ On the installed system: `/var/log/artix-cosmic-install.log`.
 7. It adds the PipeWire autostart.
 8. It installs Audacity, OBS Studio, Steam and Discord.
 9. It enables these services: dbus, elogind, NetworkManager, bluetooth, cosmic-greeter-daemon and cosmic-greeter.
-10. It builds `yay` and uses it to install `claude-desktop`, `brave-origin-bin` and `davinci-resolve-studio`, along with the OpenCL runtime that matches your GPU. It gives the user temporary sudo rights for these builds and removes them afterwards.
+10. It builds `yay` and uses it to install `claude-desktop` and `brave-origin-bin`. It also installs the OpenCL runtime for your GPU and the `install-davinci-resolve` command, which builds Resolve from the zip you download after the first boot. It gives the user temporary sudo rights for these builds and removes them afterwards.
 11. It runs `mkinitcpio -P` and `grub-install` (plus the fallback copy on UEFI), then `grub-mkconfig`.
 
 ---

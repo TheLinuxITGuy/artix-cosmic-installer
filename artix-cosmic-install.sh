@@ -138,8 +138,7 @@ gather_config() {
     [[ -f "/usr/share/zoneinfo/$TIMEZONE" ]] || die "Unknown timezone '$TIMEZONE'."
     ask LOCALE "Locale" "en_US.UTF-8"
     ask KEYMAP "Console keymap" "us"
-    ask INSTALL_RESOLVE "Install DaVinci Resolve Studio from the AUR (large download, long build) y/n" "y"
-    RESOLVE_PKG=${RESOLVE_PKG:-davinci-resolve-studio}
+    ask INSTALL_RESOLVE "Prepare for DaVinci Resolve Studio (OpenCL + install-davinci-resolve helper) y/n" "y"
     EXTRA_PKGS=${EXTRA_PKGS-}
     AUR_EXTRA_PKGS=${AUR_EXTRA_PKGS-brave-origin-bin}
 
@@ -163,7 +162,7 @@ gather_config() {
   Desktop       : COSMIC + cosmic-greeter (greetd)
   GPU drivers   : $GPU
   Apps          : Audacity, OBS Studio, Steam, Discord${EXTRA_PKGS:+, $EXTRA_PKGS}
-  AUR           : claude-desktop${AUR_EXTRA_PKGS:+, $AUR_EXTRA_PKGS}$([[ "${INSTALL_RESOLVE,,}" == y* ]] && echo ", $RESOLVE_PKG")
+  AUR           : claude-desktop${AUR_EXTRA_PKGS:+, $AUR_EXTRA_PKGS}$([[ "${INSTALL_RESOLVE,,}" == y* ]] && echo "  (+ Resolve helper, run after first boot)")
   Host / user   : $NEW_HOSTNAME / $NEW_USER (sudo via wheel)
   Root account  : $([[ "${LOCK_ROOT:-1}" == 1 ]] && echo "locked -- use sudo" || echo "same password as $NEW_USER")
   Locale / TZ   : $LOCALE / $TIMEZONE / keymap $KEYMAP
@@ -238,7 +237,7 @@ run_stage2() {
     step "Handing over to the chroot (stage 2)"
     ( umask 077
       declare -p SCRIPT_VERSION DISK BOOT_MODE INIT NEW_HOSTNAME NEW_USER TIMEZONE LOCALE KEYMAP \
-                 GPU UCODE INSTALL_RESOLVE RESOLVE_PKG EXTRA_PKGS AUR_EXTRA_PKGS USER_HASH ROOT_HASH \
+                 GPU UCODE INSTALL_RESOLVE EXTRA_PKGS AUR_EXTRA_PKGS USER_HASH ROOT_HASH \
                  > "$TARGET$CONF_IN_TARGET" )
     install -m700 "$(readlink -f "${BASH_SOURCE[0]}")" "$TARGET$SCRIPT_IN_TARGET"
     artix-chroot "$TARGET" /bin/bash "$SCRIPT_IN_TARGET" --stage2
@@ -272,6 +271,15 @@ stage1() {
   COSMIC login screen -- sign in as '$NEW_USER'.
   Full log: /var/log/artix-cosmic-install.log (on the new system)
 EOF
+    if [[ "${INSTALL_RESOLVE,,}" == y* ]]; then
+        cat <<EOF
+
+  DaVinci Resolve Studio: after you log in, download the Linux zip from
+  Blackmagic into ~/Downloads, then open a terminal and run:
+      install-davinci-resolve
+  (Run it once without the zip and it tells you exactly which file it needs.)
+EOF
+    fi
 }
 
 # =============================================================================
@@ -569,7 +577,7 @@ enable_services() {
 }
 
 install_aur() {
-    step "AUR: yay, Claude desktop${AUR_EXTRA_PKGS:+, $AUR_EXTRA_PKGS}$([[ "${INSTALL_RESOLVE,,}" == y* ]] && echo ", $RESOLVE_PKG")"
+    step "AUR: yay, Claude desktop${AUR_EXTRA_PKGS:+, $AUR_EXTRA_PKGS}"
     local tmp_sudo=/etc/sudoers.d/99-artix-installer-temp
     echo "$NEW_USER ALL=(ALL) NOPASSWD: ALL" > "$tmp_sudo"; chmod 440 "$tmp_sudo"
 
@@ -577,7 +585,7 @@ install_aur() {
 
     if ! command -v yay &>/dev/null; then
         as_user 'set -e; rm -rf /tmp/yay-bin; git clone --depth 1 https://aur.archlinux.org/yay-bin.git /tmp/yay-bin; cd /tmp/yay-bin; makepkg -si --noconfirm' \
-            || record_failure "AUR: yay-bin (AUR helper) -- Claude desktop and Resolve were skipped too"
+            || record_failure "AUR: yay-bin (AUR helper) -- Claude desktop and Brave Origin were skipped too"
     fi
 
     if command -v yay &>/dev/null; then
@@ -599,18 +607,81 @@ install_aur() {
                     nvidia) cl+=(opencl-nvidia) ;;
                 esac
             done
-            ((${#cl[@]})) && pac_soft "${cl[@]}"
-            info "Building $RESOLVE_PKG -- this downloads ~3 GB from Blackmagic and can take a while."
-            if as_user "yay -S $yayflags $RESOLVE_PKG"; then
-                # Studio activation needs a writable license dir
-                install -dm0755 -o "$NEW_USER" -g "$NEW_USER" /opt/resolve/.license 2>/dev/null || true
-            else
-                record_failure "AUR: $RESOLVE_PKG"
-            fi
+            if ((${#cl[@]})); then pac_soft "${cl[@]}"; fi
+            # Resolve itself can't be built here: the AUR package needs the zip
+            # you download from Blackmagic. install_resolve_helper adds a
+            # command that finishes the job after first boot.
         fi
     fi
     rm -f "$tmp_sudo"
     rm -rf "/home/$NEW_USER/.cache/yay"
+}
+
+install_resolve_helper() {
+    [[ "${INSTALL_RESOLVE,,}" == y* ]] || return 0
+    step "Adding the install-davinci-resolve helper"
+    cat > /usr/local/bin/install-davinci-resolve <<'RESOLVE_HELPER_EOF'
+#!/usr/bin/env bash
+# install-davinci-resolve -- build DaVinci Resolve from the AUR using the zip
+# you downloaded from Blackmagic. The AUR package can't download it for you.
+#
+# Usage (as your normal user, NOT root):
+#   install-davinci-resolve          # Studio edition (default)
+#   install-davinci-resolve free     # free edition
+set -euo pipefail
+
+URL="https://www.blackmagicdesign.com/support/family/davinci-resolve-and-fusion"
+case "${1:-studio}" in
+    studio) PKG=davinci-resolve-studio; NAME="DaVinci Resolve Studio" ;;
+    free)   PKG=davinci-resolve;        NAME="DaVinci Resolve" ;;
+    *) echo "Usage: install-davinci-resolve [studio|free]"; exit 1 ;;
+esac
+[[ $EUID -ne 0 ]] || { echo "Run this as your normal user, not root/sudo (it asks for sudo when needed)."; exit 1; }
+for c in git makepkg; do command -v "$c" >/dev/null || { echo "Missing '$c' -- install base-devel and git."; exit 1; }; done
+
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+echo "==> Fetching the current $PKG PKGBUILD from the AUR"
+git clone -q --depth 1 "https://aur.archlinux.org/$PKG.git" "$work/$PKG"
+cd "$work/$PKG"
+
+ver=$(awk -F' = ' '/^\tpkgver = /{print $2; exit}' .SRCINFO)
+want=$(grep -oE '[^ /=]+_Linux\.zip' .SRCINFO | head -1)
+[[ -n "$want" ]] || { echo "Couldn't work out which zip $PKG expects -- check https://aur.archlinux.org/packages/$PKG"; exit 1; }
+
+zip=""
+for d in "$HOME/Downloads" "$HOME" "$PWD" "${OLDPWD:-$HOME}"; do
+    [[ -f "$d/$want" ]] && { zip="$d/$want"; break; }
+done
+
+if [[ -z "$zip" ]]; then
+    cat <<EOF
+
+The AUR package needs:  $want   ($NAME $ver for Linux)
+
+  1. Open $URL
+  2. Download "$NAME $ver" -> Linux (fill in the short form to start the download)
+  3. Save the zip to ~/Downloads without renaming it
+  4. Run install-davinci-resolve${1:+ $1} again
+EOF
+    other=$(ls -1 "$HOME"/Downloads/DaVinci_Resolve*_Linux.zip 2>/dev/null | head -3 || true)
+    [[ -n "$other" ]] && printf '\nFound in ~/Downloads, but not the version/edition the AUR expects:\n%s\n' "$other"
+    if [[ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]] && command -v xdg-open >/dev/null; then
+        xdg-open "$URL" >/dev/null 2>&1 &
+    fi
+    exit 1
+fi
+
+echo "==> Using $zip"
+ln -sf "$zip" "$want"
+echo "==> Building $PKG $ver (this takes a while; you'll be asked for your sudo password)"
+makepkg -si --noconfirm --needed
+
+# Studio activation needs a license dir your user can write to
+sudo install -dm0755 -o "$USER" -g "$(id -gn)" /opt/resolve/.license
+echo "==> Done. Start $NAME from the app library."
+RESOLVE_HELPER_EOF
+    chmod 755 /usr/local/bin/install-davinci-resolve
 }
 
 install_bootloader() {
@@ -641,6 +712,7 @@ stage2() {
     install_apps
     enable_services
     install_aur
+    install_resolve_helper
     install_bootloader
     sudo -u "$NEW_USER" xdg-user-dirs-update 2>/dev/null || true
     step "Stage 2 complete"
