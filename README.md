@@ -5,7 +5,7 @@ This script installs **Artix Linux** (Arch without systemd) on one whole disk. Y
 | | |
 |---|---|
 | **Kernel** | `linux-zen` and its headers |
-| **Filesystem** | **XFS** root. On UEFI there's also a FAT32 EFI partition. Swap is optional. |
+| **Filesystem** | **XFS** root. On UEFI there's also a FAT32 EFI partition. No swap. |
 | **Init** | **dinit** (recommended) or **OpenRC** |
 | **Desktop** | **COSMIC**, with **cosmic-greeter** as the login screen (it runs on greetd) |
 | **Apps** | DaVinci Resolve **Studio**, Audacity, Claude desktop, OBS Studio, Steam, Discord, **Brave Origin** (browser) |
@@ -156,7 +156,6 @@ The script asks for the following. Press **Enter** to accept the default shown i
 | Timezone | `America/Denver` | Any `Region/City` from `/usr/share/zoneinfo`, e.g. `America/New_York` |
 | Locale | `en_US.UTF-8` | |
 | Console keymap | `us` | |
-| Swap size | `8G` | Use `0` for no swap partition. |
 | Install DaVinci Resolve Studio | `y` | Downloads about 3 GB from Blackmagic and builds the package. You can answer `n` and install it later. |
 | Passwords | — | One for your user and one for root. Only a hashed copy is stored, and it's deleted after the install. |
 
@@ -170,13 +169,13 @@ You can set any answer ahead of time with an environment variable:
 
 ```bash
 DISK=/dev/nvme0n1 INIT=dinit NEW_HOSTNAME=studio NEW_USER=chris \
-TIMEZONE=America/Denver SWAP_SIZE=16G INSTALL_RESOLVE=y \
+TIMEZONE=America/Denver INSTALL_RESOLVE=y \
 bash artix-cosmic-install.sh
 ```
 
 | Variable | Meaning |
 |---|---|
-| `DISK` `INIT` `NEW_HOSTNAME` `NEW_USER` `TIMEZONE` `LOCALE` `KEYMAP` `SWAP_SIZE` `INSTALL_RESOLVE` | Same as the prompts above |
+| `DISK` `INIT` `NEW_HOSTNAME` `NEW_USER` `TIMEZONE` `LOCALE` `KEYMAP` `INSTALL_RESOLVE` | Same as the prompts above |
 | `GPU` | Overrides the GPU detection with any of `amd` `intel` `nvidia` `vm`, separated by spaces (e.g. `GPU="intel nvidia"` for a hybrid laptop) |
 | `RESOLVE_PKG` | `davinci-resolve-studio` by default. Set it to `davinci-resolve` for the free edition. |
 | `EXTRA_PKGS` | Extra packages from the Artix/Arch repos, separated by spaces. Empty by default. |
@@ -278,8 +277,10 @@ On the installed system: `/var/log/artix-cosmic-install.log`.
 2. It detects your CPU microcode (Intel or AMD) and your GPU vendors.
 3. It asks the [prompts](#7-answer-the-prompts) and waits for you to type `ERASE`.
 4. It partitions the disk with GPT using `sfdisk`:
-   - UEFI: `1 GiB EFI (FAT32)` + `swap` + `XFS /`
-   - BIOS: `1 MiB bios_grub` + `swap` + `XFS /`
+   - UEFI: `1 GiB EFI (FAT32)` + `XFS /`
+   - BIOS: `1 MiB bios_grub` + `XFS /`
+
+   No swap is created.
 5. It runs `basestrap` with `base base-devel <init> elogind-<init> dbus-<init> linux-zen linux-zen-headers linux-firmware xfsprogs grub networkmanager-<init> sudo git …`. Then it writes the fstab with `fstabgen -U`.
 
 **Stage 2** runs inside `artix-chroot`:

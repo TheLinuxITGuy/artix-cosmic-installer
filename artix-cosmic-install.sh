@@ -138,8 +138,6 @@ gather_config() {
     [[ -f "/usr/share/zoneinfo/$TIMEZONE" ]] || die "Unknown timezone '$TIMEZONE'."
     ask LOCALE "Locale" "en_US.UTF-8"
     ask KEYMAP "Console keymap" "us"
-    ask SWAP_SIZE "Swap partition size (e.g. 8G, 16G, 0 = none)" "8G"
-    [[ "$SWAP_SIZE" =~ ^(0|[0-9]+[MG])$ ]] || die "SWAP_SIZE must look like 8G, 512M or 0."
     ask INSTALL_RESOLVE "Install DaVinci Resolve Studio from the AUR (large download, long build) y/n" "y"
     RESOLVE_PKG=${RESOLVE_PKG:-davinci-resolve-studio}
     EXTRA_PKGS=${EXTRA_PKGS-}
@@ -149,16 +147,14 @@ gather_config() {
     ask_password USER_HASH "$NEW_USER"
     ask_password ROOT_HASH "root"
 
-    local swap_line="none" esp_line="n/a (BIOS: 1 MiB bios_grub partition)"
-    [[ "$SWAP_SIZE" != 0 ]] && swap_line="$SWAP_SIZE swap partition"
+    local esp_line="n/a (BIOS: 1 MiB bios_grub partition)"
     [[ "$BOOT_MODE" == uefi ]] && esp_line="1 GiB FAT32 ESP -> /boot/efi"
 
     step "Summary"
     cat <<EOF
   Disk          : $DISK  (${disk_gib} GiB)  -- EVERYTHING ON IT WILL BE DELETED
   Layout        : $esp_line
-                  $swap_line
-                  rest = XFS root (/)
+                  rest = XFS root (/)   (no swap)
   Boot          : $BOOT_MODE + GRUB
   Init          : $INIT
   Kernel        : linux-zen (+ headers)
@@ -177,7 +173,7 @@ EOF
 
 partition_disk() {
     step "Partitioning $DISK"
-    swapoff -a || true
+    swapoff -a 2>/dev/null || true   # release any old swap on the target disk
     umount -R "$TARGET" 2>/dev/null || true
     wipefs -af "$DISK"
 
@@ -189,12 +185,6 @@ partition_disk() {
         layout+="size=1MiB, type=21686148-6449-6E6F-744E-656564454649, name=BIOSBOOT"$'\n'
         ESP_PART=""; n=$((n+1))
     fi
-    if [[ "$SWAP_SIZE" != 0 ]]; then
-        layout+="size=${SWAP_SIZE}iB, type=S, name=SWAP"$'\n'
-        SWAP_PART=$(part_path "$DISK" $n); n=$((n+1))
-    else
-        SWAP_PART=""
-    fi
     layout+="type=L, name=ARTIX"$'\n'
     ROOT_PART=$(part_path "$DISK" $n)
 
@@ -204,7 +194,6 @@ partition_disk() {
 
     step "Formatting (XFS root)"
     [[ -n "$ESP_PART" ]]  && mkfs.fat -F32 -n EFI "$ESP_PART"
-    [[ -n "$SWAP_PART" ]] && mkswap -L SWAP "$SWAP_PART"
     mkfs.xfs -f -L ARTIX "$ROOT_PART"
 
     mount "$ROOT_PART" "$TARGET"
@@ -212,7 +201,6 @@ partition_disk() {
         mkdir -p "$TARGET/boot/efi"
         mount "$ESP_PART" "$TARGET/boot/efi"
     fi
-    [[ -n "$SWAP_PART" ]] && swapon "$SWAP_PART"
     lsblk "$DISK"
 }
 
