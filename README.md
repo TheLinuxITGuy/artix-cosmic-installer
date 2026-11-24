@@ -109,26 +109,31 @@ sudo dd if=artix-base-dinit-*.iso of=/dev/sdX bs=4M status=progress oflag=sync
 
 **USB tethering from your phone** also works without any setup. Plug the phone in, turn on USB tethering, and it shows up as a wired connection. If it doesn't connect by itself, run `dhcpcd`.
 
-**Wi-Fi.** Which Wi-Fi tool the live ISO includes has changed between ISO releases, so check first:
+**Wi-Fi.** Current Artix ISOs use **NetworkManager (`nmcli`)**. ConnMan's `connmanctl` is no longer included.
 ```bash
 rfkill unblock wifi
-command -v nmcli iwctl wpa_supplicant connmanctl   # prints the tools this ISO has
-ip link                                            # your Wi-Fi interface, e.g. wlan0 or wlp1s0
+nmcli radio wifi on
+nmcli device wifi list                              # find your network name (SSID)
+nmcli --ask device wifi connect "YourNetworkName"   # asks for the Wi-Fi password
 ```
-Then use whichever tool it found.
+Type the network name exactly as the list shows it. Keep the quotes if it has spaces.
 
-**`nmcli` (NetworkManager)**
+<details>
+<summary>Older or different ISOs (no <code>nmcli</code>)</summary>
+
+Check which Wi-Fi tool the ISO has, and find your interface name:
 ```bash
-nmcli device wifi list
-nmcli --ask device wifi connect "YourNetworkName"
+command -v nmcli iwctl wpa_supplicant connmanctl
+ip link                                            # e.g. wlan0 or wlp1s0
 ```
+In the commands below, replace `wlan0` with your interface name.
 
 **`iwctl` (iwd)**
 ```bash
 iwctl station wlan0 scan
 iwctl station wlan0 get-networks
-iwctl station wlan0 connect "YourNetworkName"      # asks for the password
-dhcpcd wlan0                                       # only needed if you don't get an IP address
+iwctl station wlan0 connect "YourNetworkName"
+dhcpcd wlan0                                       # only if you don't get an IP address
 ```
 
 **`wpa_supplicant` only**
@@ -138,17 +143,17 @@ wpa_supplicant -B -i wlan0 -c /tmp/wifi.conf
 dhcpcd wlan0
 ```
 
-**`connmanctl` (ConnMan, used by older ISOs)**
+**`connmanctl` (ConnMan)**
 ```
 connmanctl
 agent on
 enable wifi
 scan wifi
-services                    # lists networks, e.g.  MyWifi   wifi_abc123_managed_psk
+services
 connect wifi_abc123_managed_psk
 quit
 ```
-In all of these, replace `wlan0` with your interface name from `ip link`.
+</details>
 
 **Check that you're online:**
 ```bash
@@ -175,7 +180,7 @@ The script asks for the following. Press **Enter** to accept the default shown i
 
 | Prompt | Default | Notes |
 |---|---|---|
-| Target disk | — | Pick from the list, e.g. `/dev/nvme0n1` or `/dev/sda`. **This disk will be wiped.** |
+| Target disk | — | Pick your **internal** drive from the list, e.g. `/dev/nvme0n1`. Your USB stick appears in the list too, so check the size and model to avoid choosing it. **This disk will be wiped.** |
 | Init system | init of the ISO you booted | `dinit` or `openrc` |
 | Hostname | `artix` | |
 | Username | — | Your login. It's added to `wheel`, so you can use sudo. |
